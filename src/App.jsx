@@ -2,7 +2,8 @@ import React from 'react'
 import ChatbotIcon from './components/ChatbotIcon';
 
 const App = () => {
-  return <div className="container">
+  return (
+  <div className="container">
     <div className="chatbot-popup">
       {/* Chatbot Header */}
       <div className="chat-header">
@@ -10,7 +11,7 @@ const App = () => {
           <ChatbotIcon />
           <h2 className="logo-text">Chatbot</h2>
         </div>
-        <button className="material-symbols-outlined"> arrow_downward
+        <button className="material-symbols-outlined button"> keyboard_arrow_down
         </button>
       </div>
 
@@ -27,18 +28,19 @@ const App = () => {
             User message
           </p>
         </div>
+      </div>
 
-        {/* Chatbot Footer */}
-        <div className="chat-footer">
-          <form action="#" className="chat-form">
-            <input type="text" placeholder="Message..."
-              className="message-input" required />
-            <button className="material-symbols-outlined">arrow_upward</button>
-          </form>
-        </div>
+      {/* Chatbot Footer */}
+      <div className="chat-footer">
+        <form action="#" className="chat-form">
+          <input type="text" placeholder="Message..."
+            className="message-input" required />
+          <button className="material-symbols-outlined">arrow_upward</button>
+        </form>
       </div>
     </div>
   </div>
-}
+  );
+};
 
 export default App;

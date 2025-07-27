@@ -30,6 +30,7 @@ body{
   display: flex;
   flex-direction: column;
   height: 600px;
+  justify-content: space-between;
 }
 
 .chatbot-popup .chat-header {
@@ -40,10 +41,11 @@ body{
   background: rgb(50, 137, 50);
 }
 
-.chat-header .header.info {
+.chat-header .header-info {
   display: flex;
   gap: 10px;
   align-items: center;
+  flex-wrap: nonwrap;
 }
 
 .header-info svg {
@@ -54,12 +56,15 @@ body{
   fill: green;
   background: white;
   border-radius: 50%;
+  vertical-align: middle;
 }
 
 .header-info .logo-text {
   color: #fff;
   font-size: 1.31rem;
   font-weight: 600;
+  margin: 0;
+  white-space: nonwrap;
 }
 
 .chat-header .button {
@@ -146,6 +151,7 @@ body{
   background: white;
   outline: 1px solid white;
   box-shadow: 0 0 8px rgb(117, 115, 115);
+  border-radius: 25px;
 }
 
 .chat-footer .chat-form:focus-within {
