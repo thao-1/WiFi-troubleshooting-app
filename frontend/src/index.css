@@ -181,8 +181,14 @@ body{
   border-radius: 50%;
   background: green;
   transition: 0.2s ease;
+  display: none;
 }
 
 .chat-form .button:hover {
   background: #469f43;
 }
+
+.chat-form .message-input:valid~button {
+  display: block;
+}
+
