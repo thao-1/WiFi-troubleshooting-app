@@ -1,5 +1,5 @@
 import openai
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional, Tuple, Any
 from app.models.schemas import (
     ConversationState, UserSymptoms, ChatMessage, SessionData, AutoTestResults
 )

@@ -1,6 +1,6 @@
 const API_BASE_URL = 'http://localhost:8000/api/v1';
 
-export const sendChatMessage = async (message, sessionId) => {
+export const sendChatMessage = async (message, sessionId, autoTestResults = null) => {
   const response = await fetch(`${API_BASE_URL}/chat`, {
     method: 'POST',
     headers: {
@@ -9,6 +9,7 @@ export const sendChatMessage = async (message, sessionId) => {
     body: JSON.stringify({
       message: message,
       session_id: sessionId,
+      auto_test_results: autoTestResults
     }),
   });
   

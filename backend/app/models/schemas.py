@@ -51,7 +51,7 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     message: str
     state: ConversationState
-    symptons: UserSymptoms
+    symptoms: UserSymptoms
     conversation_history: List[ChatMessage]
     next_question: Optional[str] = None
     is_conversation_ended: bool = False

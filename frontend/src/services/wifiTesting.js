@@ -3,9 +3,9 @@ export class WiFiTester {
     async testConnectivity() {
         try {
             const start = Date.now();
-            await fetch('https://www.google.com/favicon.ico', {
+            // Use httpbin.org which allows CORS
+            await fetch('https://httpbin.org/get', {
                 method: 'GET',
-                mode: 'no-cors',
                 cache: 'no-cache'
             });
             const end = Date.now();
@@ -16,6 +16,7 @@ export class WiFiTester {
                 timestamp: new Date().toISOString()
             };
         } catch (error) {
+            console.error('Connectivity test failed:', error);
             return {
                 connected: false,
                 error: error.message,
@@ -26,11 +27,12 @@ export class WiFiTester {
 
     async measureSpeed() {
         try {
-            const imageUrl = 'https://www.google.com/images/branding/googlelogo/1x/googlelogo_color_272x92dp.png';
-            const fileSizeBytes = 13000;
+            // Use httpbin.org bytes endpoint which allows CORS
+            const imageUrl = 'https://httpbin.org/bytes/50000'; 
+            const fileSizeBytes = 50000;
 
             const startTime = Date.now();
-            const response = await fetch(imageUrl + '?cache=' + Date.now());
+            const response = await fetch(imageUrl);
             await response.blob();
             const endTime = Date.now();
 
@@ -45,6 +47,7 @@ export class WiFiTester {
                 timestamp: new Date().toISOString()
             };
         } catch (error) {
+            console.error('Speed test failed:', error);
             return {
                 speed: null,
                 latency: null,
@@ -55,12 +58,17 @@ export class WiFiTester {
     }
 
     async gatherAutomaticData() {
+        console.log('Starting automatic WiFi tests...');
         const data = {};
 
+        console.log('Testing connectivity...');
         data.connectivity = await this.testConnectivity();
+        console.log('Connectivity result:', data.connectivity);
 
         if (data.connectivity.connected) {
+            console.log('Testing speed...');
             data.speed = await this.measureSpeed();
+            console.log('Speed result:', data.speed);
         }
 
         if (navigator.connection) {
@@ -69,16 +77,18 @@ export class WiFiTester {
                 downlink: navigator.connection.downlink,
                 rtt: navigator.connection.rtt
             };
+            console.log('Connection info:', data.connectionInfo);
         }
 
         data.deviceType = /Mobi|Android/i.test(navigator.userAgent) ? 'mobile' : 'desktop';
-
+        console.log('Final test data:', data);
+        
         return data;
     }
 
     formatAutoTestResults(autoData) {
         return {
-            connectivity_status: autoData.connectivity?.connected || fasle,
+            connectivity_status: autoData.connectivity?.connected || false,
             speed_mbps: autoData.speed?.speed || null,
             latency_ms: autoData.connectivity?.latency || null,
             effective_connection_type: autoData.connectionInfo?.type || null,
@@ -88,3 +98,4 @@ export class WiFiTester {
         };
     }
 }
+

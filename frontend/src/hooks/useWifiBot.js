@@ -4,7 +4,7 @@ import { WiFiTester } from '../services/wifiTesting';
 
 export const useWifiBot = () => {
     const [messages, setMessages] = useState([]);
-    const [isLoading, setIsLoadiing] = useState(fasle);
+    const [isLoading, setIsLoading] = useState(false);
     const [isTesting, setIsTesting] = useState(false);
     const [sessionId] = useState('session_' + Date.now());
 
@@ -22,7 +22,7 @@ export const useWifiBot = () => {
         if (!message.trim()) return;
 
         addMessage(message, true);
-        setIsLoadiing(true);
+        setIsLoading(true);
 
         try{
             let autoTestResults = null;
@@ -40,7 +40,7 @@ export const useWifiBot = () => {
         }   catch (error) {
             addMessage('Sorry, I encountered an error. Please try again.');
         }   finally {
-            setIsLoadiing(false);
+            setIsLoading(false);
         }
     }, [messages.length, sessionId, addMessage]);
 

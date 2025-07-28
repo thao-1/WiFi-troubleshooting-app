@@ -74,12 +74,14 @@ async def chat_endpoint(request: ChatRequest):
         else:
             # No test results provided, ask for them or skip
             if "skip" in request.message.lower():
-                response_message = "No problem! I'll ask you some questions to diagnose the issue."
+                response_message = "No problem! I'll ask you some questions to diagnose the issue.\n\n"
                 session.state = ConversationState.TARGETED_QUESTIONS
                 session.question_path = "default"
+                session.current_question_index = 0
                 questions = troubleshoot_service.question_sets["default"]
                 next_question = questions[0]["question"]
                 current_question_number = 1
+                response_message += next_question
             else:
                 response_message = "I'm waiting for the automatic test results from your browser. If the tests aren't working, you can type 'skip tests' and I'll ask you questions instead."
                 
