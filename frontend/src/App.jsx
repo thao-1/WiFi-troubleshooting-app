@@ -4,7 +4,7 @@ import { useWifiBot } from './hooks/useWifiBot';
 
 const App = () => {
   const [inputValue, setInputValue] = useState('');
-  const { messages, isLoading, isTesting, sendMessage } = useWifiBot();
+  const { messages, isLoading, isTesting, sendMessage, showInitialOptions } = useWifiBot();
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -12,6 +12,10 @@ const App = () => {
       sendMessage(inputValue);
       setInputValue('');
     }
+  };
+
+  const handleOptionClick = (option) => {
+    sendMessage(option);
   };
 
   return (
@@ -33,9 +37,33 @@ const App = () => {
           {messages.length === 0 && (
             <div className="message bot-message">
               <ChatbotIcon />
-              <p className="message-text">
-                Hey there! <br /> How can I help you with your WiFi today?
-              </p>
+              <div className="message-content">
+                <p className="message-text">
+                  Hey there! <br /> How can I help you with your WiFi today?
+                </p>
+                {showInitialOptions && (
+                  <div className="option-buttons">
+                    <button 
+                      className="option-btn" 
+                      onClick={() => handleOptionClick("My WiFi is slow")}
+                    >
+                      My WiFi is slow
+                    </button>
+                    <button 
+                      className="option-btn" 
+                      onClick={() => handleOptionClick("I can't connect to WiFi")}
+                    >
+                      I can't connect to WiFi
+                    </button>
+                    <button 
+                      className="option-btn" 
+                      onClick={() => handleOptionClick("My WiFi keeps disconnecting")}
+                    >
+                      My WiFi keeps disconnecting
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           )}
           

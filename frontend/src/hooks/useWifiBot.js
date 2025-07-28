@@ -7,6 +7,7 @@ export const useWifiBot = () => {
     const [isLoading, setIsLoading] = useState(false);
     const [isTesting, setIsTesting] = useState(false);
     const [sessionId] = useState('session_' + Date.now());
+    const [showInitialOptions, setShowInitialOptions] = useState(true);
 
     const wifiTester = new WiFiTester();
 
@@ -21,6 +22,9 @@ export const useWifiBot = () => {
     const sendMessage = useCallback(async (message) => {
         if (!message.trim()) return;
 
+        // Hide options after first message
+        setShowInitialOptions(false);
+        
         addMessage(message, true);
         setIsLoading(true);
 
@@ -49,6 +53,7 @@ export const useWifiBot = () => {
         isLoading,
         isTesting,
         sendMessage,
-        addMessage
+        addMessage,
+        showInitialOptions
     };
 };

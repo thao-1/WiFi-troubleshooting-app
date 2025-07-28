@@ -9,131 +9,132 @@ openai.api_key = settings.openai_api_key
 
 class WiFiTroubleshootService:
     def __init__(self):
-        # Different question sets based on auto-test results
-        self.question_sets = {
-            "no_connectivity": [
-                {
-                    "question": "Can you see your WiFi network name in the list of available networks on your device?",
-                    "attribute": "can_see_network",
-                    "type": "yes_no"
-                },
-                {
-                    "question": "What color are the lights on your router right now? (Green, Red, Orange, Blinking, etc.)",
-                    "attribute": "router_lights_status", 
-                    "type": "text"
-                },
-                {
-                    "question": "Are other devices in your home (other phones, laptops, smart TVs) also unable to connect?",
-                    "attribute": "multiple_devices_affected",
-                    "type": "yes_no"
-                },
-                {
-                    "question": "When was the last time you unplugged and restarted your router?",
-                    "attribute": "days_since_last_reboot",
-                    "type": "number_or_text"
-                },
-                {
-                    "question": "Are you getting any specific error messages when trying to connect? If yes, what do they say?",
-                    "attribute": "error_messages_seen",
-                    "type": "yes_no_text"
-                }
-            ],
-            "slow_speed": [
-                {
-                    "question": "Are other devices in your home also experiencing slow internet speeds?",
-                    "attribute": "multiple_devices_affected",
-                    "type": "yes_no"
-                },
-                {
-                    "question": "Is the slowness affecting all websites and apps, or just specific ones?",
-                    "attribute": "specific_websites_affected",
-                    "type": "all_or_specific"
-                },
-                {
-                    "question": "How many days has it been since you last restarted your router by unplugging it?",
-                    "attribute": "days_since_last_reboot",
-                    "type": "number_or_text"
-                },
-                {
-                    "question": "Do you notice the slowness more at certain times of day, or is it constant?",
-                    "attribute": "intermittent_connection",
-                    "type": "constant_or_intermittent"
-                },
-                {
-                    "question": "Are you able to connect to your WiFi network normally, or do you also have trouble connecting?",
-                    "attribute": "can_connect",
-                    "type": "yes_no"
-                }
-            ],
-            "intermittent": [
-                {
-                    "question": "Does your WiFi disconnect and reconnect on its own, or do you have to manually reconnect?",
-                    "attribute": "intermittent_connection",
-                    "type": "automatic_or_manual"
-                },
-                {
-                    "question": "Are other devices in your home also experiencing these disconnections?",
-                    "attribute": "multiple_devices_affected",
-                    "type": "yes_no"
-                },
-                {
-                    "question": "Can you still see your WiFi network name when it disconnects, or does it disappear completely?",
-                    "attribute": "can_see_network",
-                    "type": "visible_or_disappears"
-                },
-                {
-                    "question": "How long has it been since you last restarted your router?",
-                    "attribute": "days_since_last_reboot",
-                    "type": "number_or_text"
-                },
-                {
-                    "question": "Do the disconnections happen more during certain activities (streaming, video calls, etc.)?",
-                    "attribute": "specific_websites_affected",
-                    "type": "activity_specific"
-                }
-            ],
-            "default": [
-                {
-                    "question": "Can you see your WiFi network name when you look for available networks on your device?",
-                    "attribute": "can_see_network",
-                    "type": "yes_no"
-                },
-                {
-                    "question": "Are you able to connect to the WiFi network, or does it fail when you try?",
-                    "attribute": "can_connect",
-                    "type": "yes_no"
-                },
-                {
-                    "question": "Are other devices in your home (phones, laptops, tablets) having the same WiFi problems?",
-                    "attribute": "multiple_devices_affected",
-                    "type": "yes_no"
-                },
-                {
-                    "question": "How many days has it been since you last restarted/rebooted your router? (Enter a number, or 'unknown' if you're not sure)",
-                    "attribute": "days_since_last_reboot",
-                    "type": "number_or_unknown"
-                },
-                {
-                    "question": "Is your internet completely down, or are you getting slow/intermittent connections?",
-                    "attribute": "internet_completely_down",
-                    "type": "down_or_slow"
-                }
-            ]
+        # Predefined issue categories for initial selection
+        self.issue_categories = {
+            "slow_wifi": "My WiFi is slow",
+            "cant_connect": "I can't connect to WiFi", 
+            "intermittent": "My WiFi keeps disconnecting"
         }
-
-    def determine_question_path(self, auto_test_results: Optional[AutoTestResults]) -> str:
-        """Determine which set of questions to ask based on auto-test results"""
-        if not auto_test_results:
-            return "default"
         
-        if not auto_test_results.connectivity_status:
-            return "no_connectivity"
-        elif auto_test_results.speed_mbps and auto_test_results.speed_mbps < 2:
+        # Example question types for AI to reference
+        self.question_examples = """
+        Example question types you can ask:
+        - Yes/No questions: "Can you see your WiFi network name in available networks?"
+        - Multiple choice: "What color are the router lights? (Green/Red/Orange/Blinking)"
+        - Number questions: "How many days since you last restarted your router?"
+        - Descriptive: "What error messages do you see when trying to connect?"
+        - Comparison: "Are other devices in your home having the same issue?"
+        """
+
+    def determine_question_path(self, issue_category: str, auto_test_results: Optional[AutoTestResults]) -> str:
+        """Determine question focus based on user's initial selection and test results"""
+        if issue_category == "slow_wifi":
             return "slow_speed"
-        elif auto_test_results.latency_ms and auto_test_results.latency_ms > 500:
-            return "intermittent"
+        elif issue_category == "cant_connect":
+            return "no_connectivity"
+        elif issue_category == "intermittent":
+            return "intermittent_connection"
         else:
-            return "default"
+            return "general_troubleshooting"
+
+    async def generate_ai_question(self, question_number: int, issue_category: str, 
+                                 auto_test_results: Optional[AutoTestResults], 
+                                 previous_answers: List[str] = None) -> str:
+        """Generate contextual questions using AI based on issue type and test results"""
+        
+        # Build context for AI
+        test_summary = ""
+        if auto_test_results:
+            test_summary = f"""
+            Connection Test Results:
+            - Internet Connected: {auto_test_results.connectivity_status}
+            - Speed: {auto_test_results.speed_mbps if auto_test_results.speed_mbps else 'Unknown'} Mbps
+            - Response Time: {auto_test_results.latency_ms if auto_test_results.latency_ms else 'Unknown'} ms
+            """
+        
+        previous_context = f"Previous answers: {', '.join(previous_answers)}" if previous_answers else "No previous answers yet"
+        
+        system_prompt = f"""You are a WiFi troubleshooting expert. You will generate 3-5 follow-up questions one at a time to diagnose the user's WiFi issue. Generate ONE question now and wait for their answer before the next question.
+
+        User's Issue: {self.issue_categories.get(issue_category, 'General WiFi problem')}
+        {test_summary}
+        {previous_context}
+
+        This is question #{question_number} of 3-5 total questions.
+
+        Requirements:
+        - Ask only ONE clear, specific question right now
+        - Focus on gathering information that helps diagnose the root cause  
+        - Make it conversational and easy to understand
+        - Don't repeat information already gathered
+        - Use the test results to guide your question
+        - After 3-5 questions, you will provide the final solution based on the test summary and user answers
+
+        Generate the next logical troubleshooting question:"""
+
+        try:
+            response = await openai.ChatCompletion.acreate(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": f"Generate question {question_number} for {issue_category} issue"}
+                ],
+                max_tokens=150,
+                temperature=0.7
+            )
+            return response.choices[0].message.content.strip()
+        except Exception as e:
+            # Fallback questions if AI fails
+            fallback_questions = [
+                "Are other devices in your home having the same WiFi problem?",
+                "How many days has it been since you last restarted your router?",
+                "What happens when you try to connect - do you get any error messages?",
+                "Is this problem happening all the time or only sometimes?",
+                "Is there anything specific about your WiFi setup you'd like me to know?"
+            ]
+            return fallback_questions[min(question_number - 1, len(fallback_questions) - 1)]
+
+    async def generate_final_solution(self, issue_category: str, auto_test_results: Optional[AutoTestResults], 
+                                    user_answers: List[str]) -> str:
+        """Generate final solution based on test results and user answers"""
+        
+        test_summary = ""
+        if auto_test_results:
+            test_summary = f"""
+            Connection Test Results:
+            - Internet Connected: {auto_test_results.connectivity_status}
+            - Speed: {auto_test_results.speed_mbps if auto_test_results.speed_mbps else 'Unknown'} Mbps
+            - Response Time: {auto_test_results.latency_ms if auto_test_results.latency_ms else 'Unknown'} ms
+            """
+        
+        system_prompt = f"""You are a WiFi troubleshooting expert. Provide a clear solution based on the test results and user answers.
+
+        User's Issue: {self.issue_categories.get(issue_category, 'General WiFi problem')}
+        {test_summary}
+        User's Answers: {', '.join(user_answers) if user_answers else 'No additional answers'}
+        
+        Requirements:
+        - Start with: "Based on your connectivity test and your answers, you should..."
+        - Provide specific, actionable steps
+        - Prioritize the most likely solution first
+        - Keep it clear and easy to follow
+        - Include why this solution addresses their specific issue
+        
+        Generate the troubleshooting solution:"""
+
+        try:
+            response = await openai.ChatCompletion.acreate(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": "Generate the solution"}
+                ],
+                max_tokens=300,
+                temperature=0.7
+            )
+            return response.choices[0].message.content.strip()
+        except Exception as e:
+            return "Based on your connectivity test and your answers, you should try restarting your router by unplugging it for 30 seconds, then plugging it back in. This resolves most common WiFi issues."
 
     def analyze_combined_results(self, symptoms: UserSymptoms) -> Dict[str, Any]:
         """Combine auto-test results with user answers to determine solution"""
@@ -304,11 +305,11 @@ This process usually takes about 5 minutes total. Let me know when you've comple
         
         if auto_results.speed_mbps:
             if auto_results.speed_mbps < 1:
-                result_text += f"🐌 **Speed:** {auto_results.speed_mbps:.1f} Mbps (Very Slow)\n"
+                result_text += f" **Speed:** {auto_results.speed_mbps:.1f} Mbps (Very Slow)\n"
             elif auto_results.speed_mbps < 5:
-                result_text += f"🚶 **Speed:** {auto_results.speed_mbps:.1f} Mbps (Slow)\n"
+                result_text += f" **Speed:** {auto_results.speed_mbps:.1f} Mbps (Slow)\n"
             else:
-                result_text += f"🚀 **Speed:** {auto_results.speed_mbps:.1f} Mbps (Good)\n"
+                result_text += f" **Speed:** {auto_results.speed_mbps:.1f} Mbps (Good)\n"
         
         if auto_results.latency_ms:
             if auto_results.latency_ms > 500:
