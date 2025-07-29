@@ -4,7 +4,7 @@ import { useWifiBot } from './hooks/useWifiBot';
 
 const App = () => {
   const [inputValue, setInputValue] = useState('');
-  const { messages, isLoading, isTesting, sendMessage, showInitialOptions } = useWifiBot();
+  const { messages, isLoading, isTesting, sendMessage, showInitialOptions, conversationEnded } = useWifiBot();
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -94,13 +94,13 @@ const App = () => {
           <form onSubmit={handleSubmit} className="chat-form">
             <input 
               type="text" 
-              placeholder="Message..."
+              placeholder={conversationEnded ? "Session ended. Start a new chat." : "Message..."}
               className="message-input" 
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
-              disabled={isLoading}
+              disabled={isLoading || conversationEnded}
             />
-            <button type="submit" className="material-symbols-outlined">
+            <button type="submit" className="material-symbols-outlined" disabled={conversationEnded}>
               arrow_upward
             </button>
           </form>

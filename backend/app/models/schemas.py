@@ -67,3 +67,4 @@ class SessionData(BaseModel):
     conversation_history: List[ChatMessage]
     current_question_index: int = 0
     question_path: str = "default"
+    user_answers: List[str] = []

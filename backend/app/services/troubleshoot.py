@@ -4,6 +4,8 @@ from app.models.schemas import (
     ConversationState, UserSymptoms, ChatMessage, SessionData, AutoTestResults
 )
 from app.core.config import settings
+from openai import AsyncOpenAI
+
 
 openai.api_key = settings.openai_api_key
 
@@ -54,13 +56,13 @@ class WiFiTroubleshootService:
         
         previous_context = f"Previous answers: {', '.join(previous_answers)}" if previous_answers else "No previous answers yet"
         
-        system_prompt = f"""You are a WiFi troubleshooting expert. You will generate 3-5 follow-up questions one at a time to diagnose the user's WiFi issue. Generate ONE question now and wait for their answer before the next question.
+        system_prompt = f"""You are a WiFi troubleshooting expert. You will help diagnose the user's WiFi issue by asking ONE question at a time.
 
         User's Issue: {self.issue_categories.get(issue_category, 'General WiFi problem')}
         {test_summary}
         {previous_context}
 
-        This is question #{question_number} of 3-5 total questions.
+        This is question #{question_number} out of 5.
 
         Requirements:
         - Ask only ONE clear, specific question right now
@@ -68,23 +70,24 @@ class WiFiTroubleshootService:
         - Make it conversational and easy to understand
         - Don't repeat information already gathered
         - Use the test results to guide your question
-        - After 3-5 questions, you will provide the final solution based on the test summary and user answers
+        - After 5 questions, you will provide a final solution (not now).
 
         Generate the next logical troubleshooting question:"""
 
         try:
-            response = await openai.ChatCompletion.acreate(
+            client = AsyncOpenAI(api_key=settings.openai_api_key)
+            response = await client.chat.completions.create(
                 model="gpt-3.5-turbo",
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": f"Generate question {question_number} for {issue_category} issue"}
                 ],
-                max_tokens=150,
-                temperature=0.7
+                max_tokens=512,
+                temperature=0.5
             )
             return response.choices[0].message.content.strip()
         except Exception as e:
-            # Fallback questions if AI fails
+            print(f"[OpenAI generate_ai_question error]: {e}")  # Log the error
             fallback_questions = [
                 "Are other devices in your home having the same WiFi problem?",
                 "How many days has it been since you last restarted your router?",
@@ -94,111 +97,56 @@ class WiFiTroubleshootService:
             ]
             return fallback_questions[min(question_number - 1, len(fallback_questions) - 1)]
 
-    async def generate_final_solution(self, issue_category: str, auto_test_results: Optional[AutoTestResults], 
-                                    user_answers: List[str]) -> str:
-        """Generate final solution based on test results and user answers"""
-        
+    async def should_reboot_router(self, auto_test_results: Optional[AutoTestResults], user_answers: List[str]) -> bool:
+        test_summary = f"Connected: {auto_test_results.connectivity_status}, Speed: {auto_test_results.speed_mbps}, Latency: {auto_test_results.latency_ms}" if auto_test_results else "No test results"
+        prompt = f"""
+        Based on the following test results and user answers, should the user try rebooting their router to solve the issue?
+
+        Test results:
+        {test_summary}
+        User answers:
+        {', '.join(user_answers)}
+
+        Respond with only "Yes" or "No".
+        """
+        try:
+            client = AsyncOpenAI(api_key=settings.openai_api_key)
+            response = await client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": "You are a network troubleshooting expert."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=20
+            )
+            answer = response.choices[0].message.content.strip().lower()
+            return "yes" in answer
+        except Exception as e:
+            print(f"[should_reboot_router error]: {e}")
+            return False
+
+    async def generate_final_suggestion(self, auto_test_results: Optional[AutoTestResults], user_answers: List[str]) -> str:
+        """Generate a final suggestion based on test results and user answers"""
         test_summary = ""
         if auto_test_results:
-            test_summary = f"""
-            Connection Test Results:
-            - Internet Connected: {auto_test_results.connectivity_status}
-            - Speed: {auto_test_results.speed_mbps if auto_test_results.speed_mbps else 'Unknown'} Mbps
-            - Response Time: {auto_test_results.latency_ms if auto_test_results.latency_ms else 'Unknown'} ms
-            """
-        
-        system_prompt = f"""You are a WiFi troubleshooting expert. Provide a clear solution based on the test results and user answers.
-
-        User's Issue: {self.issue_categories.get(issue_category, 'General WiFi problem')}
-        {test_summary}
-        User's Answers: {', '.join(user_answers) if user_answers else 'No additional answers'}
-        
-        Requirements:
-        - Start with: "Based on your connectivity test and your answers, you should..."
-        - Provide specific, actionable steps
-        - Prioritize the most likely solution first
-        - Keep it clear and easy to follow
-        - Include why this solution addresses their specific issue
-        
-        Generate the troubleshooting solution:"""
-
+            test_summary = f"Test result: Connected: {auto_test_results.connectivity_status}, Speed: {auto_test_results.speed_mbps} Mbps, Latency: {auto_test_results.latency_ms} ms."
+        user_context = f"User answers: {', '.join(user_answers)}" if user_answers else "No user answers yet"
+        system_prompt = f"You are a WiFi troubleshooting expert. Based on the following test results and user answers, provide a clear, actionable suggestion to fix the user's WiFi issue.\n\n{test_summary}\n{user_context}\nExplain your reasoning briefly and provide a clear next step."
         try:
-            response = await openai.ChatCompletion.acreate(
+            client = AsyncOpenAI(api_key=settings.openai_api_key)
+            client = AsyncOpenAI(api_key=settings.openai_api_key)
+            response = await client.chat.completions.create(
                 model="gpt-3.5-turbo",
                 messages=[
                     {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": "Generate the solution"}
+                    {"role": "user", "content": "Suggest a solution"}
                 ],
-                max_tokens=300,
-                temperature=0.7
+                max_tokens=800
             )
             return response.choices[0].message.content.strip()
         except Exception as e:
-            return "Based on your connectivity test and your answers, you should try restarting your router by unplugging it for 30 seconds, then plugging it back in. This resolves most common WiFi issues."
+            return "I'm having trouble connecting right now. Let me help you manually."
 
-    def analyze_combined_results(self, symptoms: UserSymptoms) -> Dict[str, Any]:
-        """Combine auto-test results with user answers to determine solution"""
-        analysis = {
-            "reboot_score": 0,
-            "reboot_recommended": False,
-            "confidence": "medium",
-            "primary_issue": "unknown",
-            "reasoning": [],
-            "alternative_solutions": []
-        }
-
-        # Analyze auto-test results
-        if symptoms.auto_test_results:
-            auto_results = symptoms.auto_test_results
-            
-            if not auto_results.connectivity_status:
-                analysis["reboot_score"] += 4
-                analysis["primary_issue"] = "no_connectivity"
-                analysis["reasoning"].append("Auto-test shows no internet connection")
-            
-            if auto_results.speed_mbps and auto_results.speed_mbps < 1:
-                analysis["reboot_score"] += 3
-                analysis["primary_issue"] = "slow_speed"
-                analysis["reasoning"].append(f"Very slow speed detected: {auto_results.speed_mbps:.1f} Mbps")
-            
-            if auto_results.latency_ms and auto_results.latency_ms > 1000:
-                analysis["reboot_score"] += 2
-                analysis["reasoning"].append(f"High latency detected: {auto_results.latency_ms}ms")
-
-        # Analyze user responses
-        if symptoms.multiple_devices_affected:
-            analysis["reboot_score"] += 3
-            analysis["reasoning"].append("Multiple devices affected - likely router issue")
-        
-        if symptoms.days_since_last_reboot and symptoms.days_since_last_reboot >= 7:
-            analysis["reboot_score"] += 2
-            analysis["reasoning"].append(f"Router hasn't been rebooted in {symptoms.days_since_last_reboot} days")
-        
-        if not symptoms.can_see_network:
-            analysis["reboot_score"] += 3
-            analysis["reasoning"].append("Cannot see WiFi network")
-        
-        if not symptoms.can_connect:
-            analysis["reboot_score"] += 2
-            analysis["reasoning"].append("Cannot connect to WiFi network")
-
-        # Determine recommendation
-        if analysis["reboot_score"] >= 6:
-            analysis["reboot_recommended"] = True
-            analysis["confidence"] = "high"
-        elif analysis["reboot_score"] >= 4:
-            analysis["reboot_recommended"] = True
-            analysis["confidence"] = "medium"
-        else:
-            analysis["reboot_recommended"] = False
-            analysis["alternative_solutions"] = [
-                "Contact your internet service provider",
-                "Check for service outages in your area",
-                "Update device WiFi drivers",
-                "Check router placement and interference"
-            ]
-
-        return analysis
 
     async def get_openai_response(self, user_input: str, state: ConversationState, symptoms: UserSymptoms, context: str = "") -> str:
         """Get contextual response from OpenAI"""
@@ -230,18 +178,19 @@ class WiFiTroubleshootService:
             system_prompt = "You are a helpful WiFi troubleshooting assistant."
 
         try:
-            response = await openai.ChatCompletion.acreate(
+            client = AsyncOpenAI(api_key=settings.openai_api_key)
+            response = await client.chat.completions.create(
                 model="gpt-3.5-turbo",
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_input}
                 ],
-                max_tokens=250,
+                max_tokens=512,
                 temperature=0.7
             )
             return response.choices[0].message.content.strip()
         except Exception as e:
-            return f"I'm having trouble connecting right now. Let me help you manually."
+            return "I'm having trouble connecting right now. Let me help you manually."
 
     def parse_user_response(self, user_input: str, question_type: str, attribute: str, symptoms: UserSymptoms):
         """Parse and store user responses to qualifying questions"""
