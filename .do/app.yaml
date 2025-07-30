@@ -1,0 +1,38 @@
+name: wifi-troubleshooting-app
+services:
+- name: backend
+  source_dir: /backend
+  github:
+    repo: thao-1/WiFi-troubleshooting-app
+    branch: main
+  dockerfile_path: backend/Dockerfile
+  http_port: 8000
+  instance_count: 1
+  instance_size_slug: basic-xxs
+  routes:
+  - path: /api
+  - path: /docs
+  - path: /health
+  envs:
+  - key: PYTHONPATH
+    value: /app
+  - key: PYTHONUNBUFFERED
+    value: "1"
+  - key: OPENAI_API_KEY
+    scope: RUN_TIME
+    type: SECRET
+
+- name: frontend
+  source_dir: /frontend
+  github:
+    repo: thao-1/WiFi-troubleshooting-app
+    branch: main
+  dockerfile_path: frontend/Dockerfile
+  http_port: 80
+  instance_count: 1
+  instance_size_slug: basic-xxs
+  routes:
+  - path: /
+  envs:
+  - key: REACT_APP_API_URL
+    value: ${backend.PUBLIC_URL}
