@@ -24,3 +24,7 @@ dist-ssr
 *.sw?
 
 *.env
+
+# Local Netlify folder
+.netlify
+CLOUD_DEPLOYMENT.md

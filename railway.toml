@@ -1,0 +1,15 @@
+[build]
+builder = "dockerfile"
+
+[deploy]
+startCommand = "docker-compose up"
+healthcheckPath = "/health"
+healthcheckTimeout = 300
+
+[[services]]
+name = "backend"
+source = "backend"
+
+[[services]]
+name = "frontend"
+source = "frontend"

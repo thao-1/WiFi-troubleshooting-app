@@ -17,8 +17,11 @@ class ChatSession:
         self.user_answers = []
 
 router = APIRouter()
-troubleshoot_service = TroubleshootService()
 sessions = {}
+
+# Initialize service lazily to ensure environment variables are loaded
+def get_troubleshoot_service():
+    return TroubleshootService()
 
 @router.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
@@ -28,7 +31,8 @@ async def chat(request: ChatRequest):
     logger.info(f"Received chat request - session: {session_id}, message: {user_message}")
     
     if session_id not in sessions:
-        sessions[session_id] = troubleshoot_service.initialize_session()
+        service = get_troubleshoot_service()
+        sessions[session_id] = service.initialize_session()
         logger.info(f"Created new session: {session_id}")
 
     session = sessions[session_id]
@@ -45,7 +49,8 @@ async def chat(request: ChatRequest):
         logger.info(f"Processing auto test results for session {session_id}")
         
         # Format test results using centralized method
-        formatted_results = troubleshoot_service.format_test_results(session.auto_test_results)
+        service = get_troubleshoot_service()
+        formatted_results = service.format_test_results(session.auto_test_results)
         logger.debug(f"Formatted test results: {formatted_results}")
         
         results_message = (
@@ -58,7 +63,8 @@ async def chat(request: ChatRequest):
         )
         
         # Generate first follow-up question
-        question = await troubleshoot_service.generate_next_question(
+        service = get_troubleshoot_service()
+        question = await service.generate_next_question(
             session.issue_description,
             session.auto_test_results,
             session.user_answers,
@@ -78,12 +84,13 @@ async def chat(request: ChatRequest):
 
             # Check if we've asked enough questions (max 5)
             if session.current_question_index >= 4:  # 0-indexed, so 5 questions total
-                # Generate intelligent conclusion with reboot recommendation
-                conclusion = await troubleshoot_service.generate_conclusion(session)
+                service = get_troubleshoot_service()
+                conclusion = await service.generate_conclusion(session)
                 session.state = ConversationState.POST_REBOOT_CHECK
                 return ChatResponse(message=conclusion)
             else:
-                question = await troubleshoot_service.generate_next_question(
+                service = get_troubleshoot_service()
+                question = await service.generate_next_question(
                     session.issue_description,
                     session.auto_test_results,
                     session.user_answers,
@@ -102,12 +109,14 @@ async def chat(request: ChatRequest):
     elif session.state == ConversationState.SOLUTION_ANALYSIS:
         logger.info(f"Analyzing solution for session {session_id}")
         # Check if user indicated the issue is resolved
-        if troubleshoot_service.is_issue_resolved(user_message):
+        service = get_troubleshoot_service()
+        if service.is_issue_resolved(user_message):
             logger.info(f"Issue resolved for session {session_id}")
-            return ChatResponse(message=troubleshoot_service.get_success_message())
+            return ChatResponse(message=service.get_success_message())
         
         # Check if reboot is needed
-        should_reboot = await troubleshoot_service.should_reboot_router(
+        service = get_troubleshoot_service()
+        should_reboot = await service.should_reboot_router(
             session.auto_test_results,
             session.user_answers
         )
@@ -119,14 +128,13 @@ async def chat(request: ChatRequest):
 
     elif session.state == ConversationState.POST_REBOOT_CHECK:
         logger.info(f"Post reboot check for session {session_id}")
-        if troubleshoot_service.is_issue_resolved(user_message):
+        service = get_troubleshoot_service()
+        if service.is_issue_resolved(user_message):
             logger.info(f"Issue resolved after reboot for session {session_id}")
-            session.state = ConversationState.CONVERSATION_END
-            return ChatResponse(message=troubleshoot_service.get_success_message())
+            return ChatResponse(message=service.get_success_message())
         else:
             logger.info(f"Issue not resolved after reboot for session {session_id}")
-            session.state = ConversationState.CONVERSATION_END
-            return ChatResponse(message=troubleshoot_service.get_support_message())
+            return ChatResponse(message=service.get_support_message())
 
     elif session.state == ConversationState.CONVERSATION_END:
         return ChatResponse(message="This conversation has ended. Please start a new session if you need more help.")
