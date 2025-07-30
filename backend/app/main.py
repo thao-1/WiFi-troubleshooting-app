@@ -2,6 +2,14 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.routes import chat
 from app.core.config import settings
+from dotenv import load_dotenv
+import os
+import pathlib
+
+# Load environment variables from .env file
+env_path = pathlib.Path(__file__).parent.parent / ".env"
+load_dotenv(env_path)
+
 
 app = FastAPI(
     title="WiFi Troubleshooting Chatbot",

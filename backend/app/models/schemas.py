@@ -1,25 +1,22 @@
-from bdb import effective
-from turtle import st
 from pydantic import BaseModel
-from typing import Optional, List, Dict, Any
+from typing import Optional, Dict, List, Any
 from enum import Enum
 
 class ConversationState(str, Enum):
     GREETING = "greeting"
-    AUTO_TESTING = "auto_testing"
-    TARGETED_QUESTIONS = "targeted_questions"
+    ASK_ISSUE = "ask_issue"
+    RUN_AUTO_TESTS = "run_auto_tests"
+    FOLLOW_UP_QUESTIONS = "follow_up_questions"
     SOLUTION_ANALYSIS = "solution_analysis"
-    REBOOT_INSTRUCTIONS = "reboot_instructions"
     POST_REBOOT_CHECK = "post_reboot_check"
-    RESOLVED = "resolved"
-    ESCALATION = "escalation"
+    CONVERSATION_END = "conversation_end"
+
 
 class AutoTestResults(BaseModel):
-    connectivity_status: bool
-    speed_mbps: Optional[float] = None
-    latency_ms: Optional[int] = None
-    effective_connection_type: Optional[str] = None
-    packet_loss: Optional[float] = None
+    connectivity: Dict[str, Any] = {}
+    speed: Dict[str, Any] = {}
+    connectionInfo: Dict[str, Any] = {}
+    deviceType: Optional[str] = None
     test_timestamp: Optional[str] = None
 
 class UserSymptoms(BaseModel):
@@ -45,20 +42,12 @@ class ChatMessage(BaseModel):
 class ChatRequest(BaseModel):
     message: str
     session_id: str
-    conversation_history: List[ChatMessage] = []
     auto_test_results: Optional[AutoTestResults] = None
 
 class ChatResponse(BaseModel):
     message: str
-    state: ConversationState
-    symptoms: UserSymptoms
-    conversation_history: List[ChatMessage]
     next_question: Optional[str] = None
     is_conversation_ended: bool = False
-    reboot_recommended: Optional[bool] = None
-    solution_analysis: Optional[Dict[str, Any]] = None
-    current_question_number: Optional[int] = None
-    total_questions: Optional[int] = None
 
 class SessionData(BaseModel):
     session_id: str

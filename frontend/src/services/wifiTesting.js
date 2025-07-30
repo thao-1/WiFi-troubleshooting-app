@@ -88,13 +88,11 @@ export class WiFiTester {
 
     formatAutoTestResults(autoData) {
         return {
-            connectivity_status: autoData.connectivity?.connected || false,
-            speed_mbps: autoData.speed?.speed || null,
-            latency_ms: autoData.connectivity?.latency || null,
-            effective_connection_type: autoData.connectionInfo?.type || null,
-            package_loss: null,
-            test_timestamp: new Date().toISOString(),
-            device_type: autoData.deviceType
+            connectivity: autoData.connectivity || { connected: false },
+            speed: autoData.speed || { speed: 0, latency: 0 },
+            connectionInfo: autoData.connectionInfo || { type: 'unknown' },
+            deviceType: autoData.deviceType || 'unknown',
+            test_timestamp: new Date().toISOString()
         };
     }
 }

@@ -1,271 +1,199 @@
-import openai
-from typing import List, Dict, Optional, Tuple, Any
-from app.models.schemas import (
-    ConversationState, UserSymptoms, ChatMessage, SessionData, AutoTestResults
-)
-from app.core.config import settings
+# troubleshoot.py
+import random
+from app.models.schemas import AutoTestResults
+import os
 from openai import AsyncOpenAI
 
-
-openai.api_key = settings.openai_api_key
-
-class WiFiTroubleshootService:
+class TroubleshootService:
     def __init__(self):
-        # Predefined issue categories for initial selection
-        self.issue_categories = {
-            "slow_wifi": "My WiFi is slow",
-            "cant_connect": "I can't connect to WiFi", 
-            "intermittent": "My WiFi keeps disconnecting"
-        }
+        api_key = os.getenv("OPENAI_API_KEY")
+        self.llm = AsyncOpenAI(api_key=api_key)
+
+    def initialize_session(self):
+        from app.routes.chat import ChatSession  
+        return ChatSession()
+
+    async def generate_next_question(self, issue_description: str, test_results: AutoTestResults, user_answers: list[str], question_number: int) -> str:
+        previous_context = "\n".join(
+            f"Q{i+1}: {q}\nA{i+1}: {a}" for i, (q, a) in enumerate(zip(user_answers[:-1], user_answers[1:]))
+        ) if len(user_answers) > 1 else ""
+
+        # Use centralized test results formatting
+        formatted_results = self.format_test_results(test_results)
         
-        # Example question types for AI to reference
-        self.question_examples = """
-        Example question types you can ask:
-        - Yes/No questions: "Can you see your WiFi network name in available networks?"
-        - Multiple choice: "What color are the router lights? (Green/Red/Orange/Blinking)"
-        - Number questions: "How many days since you last restarted your router?"
-        - Descriptive: "What error messages do you see when trying to connect?"
-        - Comparison: "Are other devices in your home having the same issue?"
-        """
+        test_summary = (
+            f"Connectivity: {formatted_results['connectivity_status']}, "
+            f"Speed: {formatted_results['speed']} Mbps, "
+            f"Latency: {formatted_results['latency']} ms, "
+            f"Connection Type: {formatted_results['connection_type']}, "
+            f"Device Type: {formatted_results['device_type']}"
+        )
 
-    def determine_question_path(self, issue_category: str, auto_test_results: Optional[AutoTestResults]) -> str:
-        """Determine question focus based on user's initial selection and test results"""
-        if issue_category == "slow_wifi":
-            return "slow_speed"
-        elif issue_category == "cant_connect":
-            return "no_connectivity"
-        elif issue_category == "intermittent":
-            return "intermittent_connection"
-        else:
-            return "general_troubleshooting"
+        system_prompt = f"""You are a WiFi troubleshooting expert. Your job is to help diagnose the user's WiFi issue by asking ONE question at a time.
 
-    async def generate_ai_question(self, question_number: int, issue_category: str, 
-                                 auto_test_results: Optional[AutoTestResults], 
-                                 previous_answers: List[str] = None) -> str:
-        """Generate contextual questions using AI based on issue type and test results"""
-        
-        # Build context for AI
-        test_summary = ""
-        if auto_test_results:
-            test_summary = f"""
-            Connection Test Results:
-            - Internet Connected: {auto_test_results.connectivity_status}
-            - Speed: {auto_test_results.speed_mbps if auto_test_results.speed_mbps else 'Unknown'} Mbps
-            - Response Time: {auto_test_results.latency_ms if auto_test_results.latency_ms else 'Unknown'} ms
-            """
-        
-        previous_context = f"Previous answers: {', '.join(previous_answers)}" if previous_answers else "No previous answers yet"
-        
-        system_prompt = f"""You are a WiFi troubleshooting expert. You will help diagnose the user's WiFi issue by asking ONE question at a time.
+User's Issue: {issue_description}
+{test_summary}
+{previous_context}
 
-        User's Issue: {self.issue_categories.get(issue_category, 'General WiFi problem')}
-        {test_summary}
-        {previous_context}
+This is question #{question_number+1} out of 5.
 
-        This is question #{question_number} out of 5.
+**Your task:**
+- Ask ONLY ONE clear, specific troubleshooting question.
+- Keep it smart, clever, experienced and relevant.
+- Use the test results and previous answers to guide your next question.
+- DO NOT repeat previous questions that you already had the answer.
+- After 5 questions, you MUST provide a specific conclusion with clear reboot instructions OR specific troubleshooting steps.
+- Be very specific: tell them exactly what to reboot, how to do it, and what to expect.
+- If reboot is needed, ask them to reboot then ask a final question: "Did the reboot improve your connection?" Yes/No "
+- Your last conclusion response MUST end with: **"Did the reboot improve your connection? (Yes/No)"** — nothing more.
+- In the conclusion, DO NOT add follow-up offers of help, support messages, or any other texts after the Yes/No question.
 
-        Requirements:
-        - Ask only ONE clear, specific question right now
-        - Focus on gathering information that helps diagnose the root cause  
-        - Make it conversational and easy to understand
-        - Don't repeat information already gathered
-        - Use the test results to guide your question
-        - After 5 questions, you will provide a final solution (not now).
+Now ask ONLY the next question or finish with the final reboot instructions and Yes/No question:
+"""
 
-        Generate the next logical troubleshooting question:"""
-
-        try:
-            client = AsyncOpenAI(api_key=settings.openai_api_key)
-            response = await client.chat.completions.create(
-                model="gpt-3.5-turbo",
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": f"Generate question {question_number} for {issue_category} issue"}
-                ],
-                max_tokens=512,
-                temperature=0.5
-            )
-            return response.choices[0].message.content.strip()
-        except Exception as e:
-            print(f"[OpenAI generate_ai_question error]: {e}")  # Log the error
-            fallback_questions = [
-                "Are other devices in your home having the same WiFi problem?",
-                "How many days has it been since you last restarted your router?",
-                "What happens when you try to connect - do you get any error messages?",
-                "Is this problem happening all the time or only sometimes?",
-                "Is there anything specific about your WiFi setup you'd like me to know?"
+        response = await self.llm.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": system_prompt},
             ]
-            return fallback_questions[min(question_number - 1, len(fallback_questions) - 1)]
+        )
+        return response.choices[0].message.content.strip()
 
-    async def should_reboot_router(self, auto_test_results: Optional[AutoTestResults], user_answers: List[str]) -> bool:
-        test_summary = f"Connected: {auto_test_results.connectivity_status}, Speed: {auto_test_results.speed_mbps}, Latency: {auto_test_results.latency_ms}" if auto_test_results else "No test results"
-        prompt = f"""
-        Based on the following test results and user answers, should the user try rebooting their router to solve the issue?
-
-        Test results:
-        {test_summary}
-        User answers:
-        {', '.join(user_answers)}
-
-        Respond with only "Yes" or "No".
-        """
-        try:
-            client = AsyncOpenAI(api_key=settings.openai_api_key)
-            response = await client.chat.completions.create(
-                model="gpt-3.5-turbo",
-                messages=[
-                    {"role": "system", "content": "You are a network troubleshooting expert."},
-                    {"role": "user", "content": prompt}
-                ],
-                max_tokens=20
-            )
-            answer = response.choices[0].message.content.strip().lower()
-            return "yes" in answer
-        except Exception as e:
-            print(f"[should_reboot_router error]: {e}")
-            return False
-
-    async def generate_final_suggestion(self, auto_test_results: Optional[AutoTestResults], user_answers: List[str]) -> str:
-        """Generate a final suggestion based on test results and user answers"""
-        test_summary = ""
-        if auto_test_results:
-            test_summary = f"Test result: Connected: {auto_test_results.connectivity_status}, Speed: {auto_test_results.speed_mbps} Mbps, Latency: {auto_test_results.latency_ms} ms."
-        user_context = f"User answers: {', '.join(user_answers)}" if user_answers else "No user answers yet"
-        system_prompt = f"You are a WiFi troubleshooting expert. Based on the following test results and user answers, provide a clear, actionable suggestion to fix the user's WiFi issue.\n\n{test_summary}\n{user_context}\nExplain your reasoning briefly and provide a clear next step."
-        try:
-            client = AsyncOpenAI(api_key=settings.openai_api_key)
-            client = AsyncOpenAI(api_key=settings.openai_api_key)
-            response = await client.chat.completions.create(
-                model="gpt-3.5-turbo",
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": "Suggest a solution"}
-                ],
-                max_tokens=800
-            )
-            return response.choices[0].message.content.strip()
-        except Exception as e:
-            return "I'm having trouble connecting right now. Let me help you manually."
-
-
-    async def get_openai_response(self, user_input: str, state: ConversationState, symptoms: UserSymptoms, context: str = "") -> str:
-        """Get contextual response from OpenAI"""
-        
-        if state == ConversationState.GREETING:
-            system_prompt = """You are a helpful WiFi troubleshooting assistant. 
-            Acknowledge the user's WiFi problem warmly and explain that you'll run automatic tests first, 
-            then ask targeted questions to find the best solution. Keep it conversational and reassuring."""
+    def format_test_results(self, test_results: AutoTestResults) -> dict:
+        """Format test results into a consistent dictionary structure."""
+        # Handle both dict and object formats
+        if hasattr(test_results, 'get'):  # dict format
+            speed_data = test_results.get('speed', {})
+            speed = speed_data.get('speed', 'unknown') if isinstance(speed_data, dict) else str(speed_data)
             
-        elif state == ConversationState.AUTO_TESTING:
-            system_prompt = """You are explaining auto-test results to a user. 
-            Be clear about what the tests found and what it means for their WiFi problem. 
-            Mention that you'll now ask some targeted questions to get the full picture."""
+            latency_data = test_results.get('connectivity', {})
+            latency = latency_data.get('latency', 'unknown') if isinstance(latency_data, dict) else str(latency_data)
             
-        elif state == ConversationState.TARGETED_QUESTIONS:
-            system_prompt = f"""You are asking targeted WiFi troubleshooting questions. 
-            The user just answered: "{user_input}"
-            Context: {context}
+            connection_data = test_results.get('connectionInfo', {})
+            connection_type = connection_data.get('type', 'unknown') if isinstance(connection_data, dict) else str(connection_data)
             
-            Acknowledge their answer briefly and naturally. Be conversational and empathetic."""
+            connectivity_data = test_results.get('connectivity', {})
+            connectivity_status = connectivity_data.get('connected', False) if isinstance(connectivity_data, dict) else False
             
-        elif state == ConversationState.SOLUTION_ANALYSIS:
-            system_prompt = f"""You are providing a WiFi troubleshooting solution based on:
-            Auto-test results and user answers: {symptoms.dict()}
+            device_type = test_results.get('deviceType', 'unknown')
+        else:  # object format
+            speed = getattr(test_results, 'speed', 'unknown')
+            if hasattr(speed, 'speed'):
+                speed = speed.speed
             
-            Explain your reasoning clearly and provide the recommended solution."""
+            latency = getattr(test_results, 'connectivity', 'unknown')
+            if hasattr(latency, 'latency'):
+                latency = latency.latency
             
-        else:
-            system_prompt = "You are a helpful WiFi troubleshooting assistant."
+            connection_type = getattr(test_results, 'connectionInfo', 'unknown')
+            if hasattr(connection_type, 'type'):
+                connection_type = connection_type.type
+            
+            connectivity_data = getattr(test_results, 'connectivity', {})
+            connectivity_status = connectivity_data.get('connected', False) if hasattr(connectivity_data, 'get') else False
+            
+            device_type = getattr(test_results, 'deviceType', 'unknown')
+        
+        return {
+            'speed': speed,
+            'latency': latency,
+            'connection_type': connection_type,
+            'connectivity_status': connectivity_status,
+            'device_type': device_type
+        }
 
-        try:
-            client = AsyncOpenAI(api_key=settings.openai_api_key)
-            response = await client.chat.completions.create(
-                model="gpt-3.5-turbo",
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_input}
-                ],
-                max_tokens=512,
-                temperature=0.7
-            )
-            return response.choices[0].message.content.strip()
-        except Exception as e:
-            return "I'm having trouble connecting right now. Let me help you manually."
+    async def generate_conclusion(self, session) -> str:
+        """Generate intelligent conclusion based on test results and user answers."""
+        formatted_results = self.format_test_results(session.auto_test_results)
+        
+        context = (
+            f"Test Results: {formatted_results['speed']} Mbps speed, {formatted_results['latency']} ms latency, {formatted_results['connection_type']} connection\n"
+            f"User Issue: {session.issue_description}\n"
+            f"User Answers: {' | '.join(session.user_answers) if session.user_answers else 'No answers provided yet'}\n"
+            f"Questions Asked: {session.current_question_index}\n"
+        )
+        
+        prompt = f"""Based on these test results and user answers:
+{context}
 
-    def parse_user_response(self, user_input: str, question_type: str, attribute: str, symptoms: UserSymptoms):
-        """Parse and store user responses to qualifying questions"""
-        user_input_lower = user_input.lower().strip()
-        
-        if question_type == "yes_no":
-            if any(word in user_input_lower for word in ["yes", "yeah", "yep", "sure", "correct"]):
-                setattr(symptoms, attribute, True)
-            elif any(word in user_input_lower for word in ["no", "nope", "not", "can't", "cannot"]):
-                setattr(symptoms, attribute, False)
-        
-        elif question_type == "number_or_unknown" or question_type == "number_or_text":
-            if "unknown" in user_input_lower or "don't know" in user_input_lower:
-                setattr(symptoms, attribute, None)
-            else:
-                try:
-                    days = int(''.join(filter(str.isdigit, user_input)))
-                    setattr(symptoms, attribute, days)
-                except:
-                    setattr(symptoms, attribute, None)
-        
-        elif question_type == "text":
-            setattr(symptoms, attribute, user_input)
-        
-        elif question_type == "yes_no_text":
-            if any(word in user_input_lower for word in ["yes", "yeah", "getting"]):
-                setattr(symptoms, attribute, True)
-            else:
-                setattr(symptoms, attribute, False)
-        
-        elif question_type == "down_or_slow":
-            if any(word in user_input_lower for word in ["completely", "down", "nothing", "no internet"]):
-                symptoms.internet_completely_down = True
-                symptoms.slow_speeds = False
-            else:
-                symptoms.internet_completely_down = False
-                symptoms.slow_speeds = True
+Provide a specific, personalized conclusion that:
+1. Acknowledges the current status
+2. Provides specific recommendations based on the actual data
+3. Includes the reboot instructions if needed
+4. Asks 1 last follow up question: "Did the reboot improve your connection? (Yes/No)
+5. Be conversational and helpful
 
-    def get_reboot_instructions(self) -> str:
-        return """Perfect! Based on my analysis, a router reboot should resolve your WiFi issues. Here's how to do it safely:
+Keep the current status format but make the analysis and recommendations intelligent and specific to this situation."""
+        
+        response = await self.llm.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": "You are a WiFi troubleshooting expert providing intelligent, personalized conclusions based on test results and user answers."},
+                {"role": "user", "content": prompt}
+            ]
+        )
+        
+        return response.choices[0].message.content
 
-**Step-by-step router reboot:**
+    def is_issue_resolved(self, user_message: str) -> bool:
+        """Check if user indicates the issue is resolved."""
+        resolved_keywords = ['fine', 'works', 'fixed', 'yes', 'good', 'better', 'resolved', 'solved']
+        return any(keyword in user_message.lower() for keyword in resolved_keywords)
 
-1. **Unplug the power cable** from your router (and modem if separate)
-2. **Wait 30 seconds** - this clears the memory completely
-3. **Plug the modem back in first** (if you have a separate modem)
-4. **Wait 1-2 minutes** for the modem to fully boot up
-5. **Plug the router back in** and wait another 2-3 minutes
-6. **Check if the WiFi network appears** on your device
+    def get_success_message(self) -> str:
+        """Get standardized success message."""
+        return "🎉 I'm so glad I could help! Your WiFi issue appears to be resolved. If you experience any problems in the future, feel free to reach out. Have a great day!"
 
-This process usually takes about 5 minutes total. Let me know when you've completed these steps!"""
+    def get_support_message(self) -> str:
+        """Get standardized support message."""
+        return "Sorry about that. Please call customer support at 888-888-8888 for further assistance."
 
-    def format_test_results(self, auto_results: AutoTestResults) -> str:
-        """Format auto-test results for user display"""
-        result_text = "🔍 **Connection Test Results:**\n\n"
-        
-        if auto_results.connectivity_status:
-            result_text += "✅ **Internet Connection:** Connected\n"
-        else:
-            result_text += "❌ **Internet Connection:** Not Connected\n"
-        
-        if auto_results.speed_mbps:
-            if auto_results.speed_mbps < 1:
-                result_text += f" **Speed:** {auto_results.speed_mbps:.1f} Mbps (Very Slow)\n"
-            elif auto_results.speed_mbps < 5:
-                result_text += f" **Speed:** {auto_results.speed_mbps:.1f} Mbps (Slow)\n"
-            else:
-                result_text += f" **Speed:** {auto_results.speed_mbps:.1f} Mbps (Good)\n"
-        
-        if auto_results.latency_ms:
-            if auto_results.latency_ms > 500:
-                result_text += f"⏱️ **Response Time:** {auto_results.latency_ms}ms (High)\n"
-            else:
-                result_text += f"⏱️ **Response Time:** {auto_results.latency_ms}ms (Normal)\n"
-        
-        result_text += "\nNow let me ask you some targeted questions to get the complete picture..."
-        
-        return result_text
+    async def should_reboot_router(self, test_results: AutoTestResults, user_answers: list[str]) -> bool:
+        # Handle both dict and object formats for test results
+        if hasattr(test_results, 'get'):  # dict format
+            speed = test_results.get('speed', {}).get('speed', 'unknown')
+            latency = test_results.get('connectivity', {}).get('latency', 'unknown')
+            connection_type = test_results.get('connectionInfo', {}).get('type', 'unknown')
+            connectivity_status = "connected" if speed != 'unknown' else "disconnected"
+            packet_loss = "0"
+            device_type = "browser"
+        else:  # object format
+            speed = getattr(test_results, 'speed', 'unknown')
+            if hasattr(speed, 'speed'):
+                speed = speed.speed
+            latency = getattr(test_results, 'connectivity', 'unknown')
+            if hasattr(latency, 'latency'):
+                latency = latency.latency
+            connection_type = getattr(test_results, 'connectionInfo', 'unknown')
+            if hasattr(connection_type, 'type'):
+                connection_type = connection_type.type
+            connectivity_status = "connected" if speed != 'unknown' else "disconnected"
+            packet_loss = "0"
+            device_type = "browser"
+
+        context = (
+            f"Connectivity: {connectivity_status}, "
+            f"Speed: {speed} Mbps, "
+            f"Latency: {latency} ms, "
+            f"Connection Type: {connection_type}, "
+            f"Packet Loss: {packet_loss}%, "
+            f"Device Type: {device_type}\n\n"
+            f"User Answers: {' | '.join(user_answers)}"
+        )
+
+        prompt = f"""You are a diagnostic AI. Based on this data:
+
+{context}
+
+Should the user try rebooting the router? Answer only YES or NO."""
+
+        response = await self.llm.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": prompt},
+            ]
+        )
+
+        answer = response.choices[0].message.content.strip().lower()
+        return "yes" in answer
+ 
