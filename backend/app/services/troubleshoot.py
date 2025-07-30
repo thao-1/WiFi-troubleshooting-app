@@ -1,19 +1,25 @@
 # troubleshoot.py
+import logging
 import random
 from app.models.schemas import AutoTestResults
 import os
 from openai import AsyncOpenAI
 
+logger = logging.getLogger(__name__)
+
 class TroubleshootService:
     def __init__(self):
         api_key = os.getenv("OPENAI_API_KEY")
         self.llm = AsyncOpenAI(api_key=api_key)
+        logger.info("TroubleshootService initialized with OpenAI client")
 
     def initialize_session(self):
         from app.routes.chat import ChatSession  
         return ChatSession()
 
     async def generate_next_question(self, issue_description: str, test_results: AutoTestResults, user_answers: list[str], question_number: int) -> str:
+        logger.info(f"Generating question {question_number + 1} for issue: {issue_description}")
+        logger.debug(f"Test results: {test_results}, User answers: {user_answers}")
         previous_context = "\n".join(
             f"Q{i+1}: {q}\nA{i+1}: {a}" for i, (q, a) in enumerate(zip(user_answers[:-1], user_answers[1:]))
         ) if len(user_answers) > 1 else ""
@@ -57,10 +63,22 @@ Now ask ONLY the next question or finish with the final reboot instructions and 
                 {"role": "system", "content": system_prompt},
             ]
         )
-        return response.choices[0].message.content.strip()
+        question = response.choices[0].message.content.strip()
+        logger.info(f"Generated question: {question}")
+        return question
 
     def format_test_results(self, test_results: AutoTestResults) -> dict:
         """Format test results into a consistent dictionary structure."""
+        logger.debug(f"Formatting test results: {test_results}")
+        if test_results is None:
+            logger.warning("Test results are None, returning default values")
+            return {
+                'speed': 'unknown',
+                'latency': 'unknown',
+                'connection_type': 'unknown',
+                'connectivity_status': False,
+                'device_type': 'unknown'
+            }
         # Handle both dict and object formats
         if hasattr(test_results, 'get'):  # dict format
             speed_data = test_results.get('speed', {})
@@ -94,6 +112,7 @@ Now ask ONLY the next question or finish with the final reboot instructions and 
             
             device_type = getattr(test_results, 'deviceType', 'unknown')
         
+        logger.debug(f"Formatted results: {{'speed': speed, 'latency': latency, 'connection_type': connection_type, 'connectivity_status': connectivity_status, 'device_type': device_type}}")
         return {
             'speed': speed,
             'latency': latency,
@@ -102,8 +121,10 @@ Now ask ONLY the next question or finish with the final reboot instructions and 
             'device_type': device_type
         }
 
-    async def generate_conclusion(self, session) -> str:
-        """Generate intelligent conclusion based on test results and user answers."""
+    async def generate_conclusion(self, session):
+        logger.info(f"Generating conclusion for session - issue: {session.issue_description}")
+        logger.debug(f"User answers: {session.user_answers}, Test results: {session.auto_test_results}")
+        # Generate intelligent conclusion based on test results and user answers."""
         formatted_results = self.format_test_results(session.auto_test_results)
         
         context = (
@@ -133,10 +154,15 @@ Keep the current status format but make the analysis and recommendations intelli
             ]
         )
         
-        return response.choices[0].message.content
+        conclusion = response.choices[0].message.content
+        logger.info(f"Generated conclusion: {conclusion[:100]}...")
+        return conclusion
 
     def is_issue_resolved(self, user_message: str) -> bool:
         """Check if user indicates the issue is resolved."""
+        resolved = any(keyword in user_message.lower() for keyword in ['fine', 'works', 'fixed', 'yes', 'good', 'better', 'resolved', 'solved'])
+        logger.info(f"Issue resolved check: {user_message} -> {resolved}")
+        return resolved
         resolved_keywords = ['fine', 'works', 'fixed', 'yes', 'good', 'better', 'resolved', 'solved']
         return any(keyword in user_message.lower() for keyword in resolved_keywords)
 
@@ -149,6 +175,8 @@ Keep the current status format but make the analysis and recommendations intelli
         return "Sorry about that. Please call customer support at 888-888-8888 for further assistance."
 
     async def should_reboot_router(self, test_results: AutoTestResults, user_answers: list[str]) -> bool:
+        logger.info(f"Checking if reboot should be recommended based on: {test_results}, {user_answers}")
+        logger.debug(f"Test results: {test_results}, User answers: {user_answers}")
         # Handle both dict and object formats for test results
         if hasattr(test_results, 'get'):  # dict format
             speed = test_results.get('speed', {}).get('speed', 'unknown')

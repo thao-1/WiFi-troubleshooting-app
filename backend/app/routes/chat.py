@@ -1,7 +1,10 @@
 # chat.py
-from fastapi import APIRouter
+import logging
+from fastapi import APIRouter, HTTPException
 from app.models.schemas import ChatRequest, ChatResponse, ConversationState
 from app.services.troubleshoot import TroubleshootService
+
+logger = logging.getLogger(__name__)
 
 # Minimal ChatSession class for session state
 class ChatSession:
@@ -22,10 +25,14 @@ async def chat(request: ChatRequest):
     session_id = request.session_id
     user_message = request.message
 
+    logger.info(f"Received chat request - session: {session_id}, message: {user_message}")
+    
     if session_id not in sessions:
         sessions[session_id] = troubleshoot_service.initialize_session()
+        logger.info(f"Created new session: {session_id}")
 
     session = sessions[session_id]
+    logger.info(f"Session {session_id} state: {session.state}")
 
     if session.state == ConversationState.GREETING:
         session.issue_description = user_message
@@ -35,8 +42,11 @@ async def chat(request: ChatRequest):
     elif session.state == ConversationState.RUN_AUTO_TESTS:
         # Store actual test results from frontend
         session.auto_test_results = request.auto_test_results
+        logger.info(f"Processing auto test results for session {session_id}")
+        
         # Format test results using centralized method
         formatted_results = troubleshoot_service.format_test_results(session.auto_test_results)
+        logger.debug(f"Formatted test results: {formatted_results}")
         
         results_message = (
             f"📊 **Test Results:**\n"
@@ -57,6 +67,7 @@ async def chat(request: ChatRequest):
         
         session.follow_up_questions.append(question)
         session.state = ConversationState.FOLLOW_UP_QUESTIONS
+        logger.info(f"Generated first follow-up question for session {session_id}")
         return ChatResponse(message=f"{results_message}\n\n{question}")
 
     elif session.state == ConversationState.FOLLOW_UP_QUESTIONS:
@@ -81,6 +92,7 @@ async def chat(request: ChatRequest):
 
                 session.follow_up_questions.append(question)
                 session.current_question_index += 1
+                logger.info(f"Generated follow-up question {session.current_question_index} for session {session_id}")
                 return ChatResponse(message=question)
         else:
             session.user_answers.append(user_message)
@@ -88,8 +100,10 @@ async def chat(request: ChatRequest):
             return ChatResponse(message="Thanks! Analyzing everything now...")
 
     elif session.state == ConversationState.SOLUTION_ANALYSIS:
+        logger.info(f"Analyzing solution for session {session_id}")
         # Check if user indicated the issue is resolved
         if troubleshoot_service.is_issue_resolved(user_message):
+            logger.info(f"Issue resolved for session {session_id}")
             return ChatResponse(message=troubleshoot_service.get_success_message())
         
         # Check if reboot is needed
@@ -104,10 +118,13 @@ async def chat(request: ChatRequest):
 
 
     elif session.state == ConversationState.POST_REBOOT_CHECK:
+        logger.info(f"Post reboot check for session {session_id}")
         if troubleshoot_service.is_issue_resolved(user_message):
+            logger.info(f"Issue resolved after reboot for session {session_id}")
             session.state = ConversationState.CONVERSATION_END
             return ChatResponse(message=troubleshoot_service.get_success_message())
         else:
+            logger.info(f"Issue not resolved after reboot for session {session_id}")
             session.state = ConversationState.CONVERSATION_END
             return ChatResponse(message=troubleshoot_service.get_support_message())
 
@@ -115,4 +132,5 @@ async def chat(request: ChatRequest):
         return ChatResponse(message="This conversation has ended. Please start a new session if you need more help.")
 
     else:
+        logger.error(f"Unknown conversation state for session {session_id}: {session.state}")
         raise HTTPException(status_code=400, detail="Unknown conversation state.")
