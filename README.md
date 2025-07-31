@@ -2,25 +2,25 @@
 
 An intelligent WiFi troubleshooting chatbot that helps users diagnose and resolve WiFi connectivity issues. The app features automatic network testing, interactive chat support, and personalized troubleshooting recommendations.
 
-## 🌐 Live Demo
+## Live Demo
 
 **Access the deployed app:** [http://147.182.156.161](http://147.182.156.161)
 
-## 🚀 Features
+## Features
 
 - **Intelligent Chat Support**: AI-powered troubleshooting assistant
 - **Automatic Network Testing**: Real-time connectivity and speed tests
 - **Interactive UI**: Modern, responsive design with real-time feedback
 - **Personalized Solutions**: Tailored recommendations based on device and network conditions
 
-## 🏗️ Architecture
+## Architecture
 
 - **Frontend**: React + Vite with modern UI components
 - **Backend**: FastAPI with OpenAI integration
 - **Deployment**: Docker containers with nginx proxy
 - **Infrastructure**: DigitalOcean Droplet
 
-## 🛠️ Local Development
+## Local Development
 
 ### Prerequisites
 
@@ -82,7 +82,7 @@ docker-compose up -d
 docker-compose logs -f
 ```
 
-## 🚢 Deployment
+## Deployment
 
 The app is deployed using Docker containers on a DigitalOcean Droplet with:
 
@@ -99,7 +99,7 @@ User → Nginx (Port 80) → React App
                    /api/* → FastAPI Backend (Port 8000)
 ```
 
-## 🔧 Configuration
+## Configuration
 
 ### Environment Variables
 
@@ -114,7 +114,7 @@ User → Nginx (Port 80) → React App
 - Handles client-side routing
 - Includes security headers and gzip compression
 
-## 🧪 Testing
+## Testing
 
 ```bash
 # Test backend health
@@ -126,24 +126,9 @@ curl -X POST http://localhost:8000/api/v1/chat \
   -d '{"message": "My WiFi is slow", "session_id": "test"}'
 ```
 
-## 📝 API Documentation
+## API Documentation
 
 - **Health Check**: `GET /health`
 - **Chat Endpoint**: `POST /api/v1/chat`
 - **Interactive Docs**: http://localhost:8000/docs (when running locally)
 
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Test locally
-5. Submit a pull request
-
-## 📄 License
-
-This project is licensed under the MIT License.
-
----
-
-**Built with ❤️ using React, FastAPI, and OpenAI**
