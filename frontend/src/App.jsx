@@ -91,19 +91,25 @@ const App = () => {
 
         {/* Chatbot Footer */}
         <div className="chat-footer">
-          <form onSubmit={handleSubmit} className="chat-form">
-            <input 
-              type="text" 
-              placeholder={conversationEnded ? "Session ended. Start a new chat." : "Message..."}
-              className="message-input" 
-              value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
-              disabled={isLoading || conversationEnded}
-            />
-            <button type="submit" className="material-symbols-outlined" disabled={conversationEnded}>
-              arrow_upward
-            </button>
-          </form>
+          {conversationEnded ? (
+            <div className="chat-ended-message" style={{ color: '#888', textAlign: 'center', padding: '0.5rem 0' }}>
+              This conversation has ended. Please start a new session if you need more help.
+            </div>
+          ) : (
+            <form onSubmit={handleSubmit} className="chat-form">
+              <input 
+                type="text" 
+                placeholder="Message..."
+                className="message-input" 
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                disabled={isLoading}
+              />
+              <button type="submit" className="material-symbols-outlined" disabled={isLoading}>
+                arrow_upward
+              </button>
+            </form>
+          )}
         </div>
       </div>
     </div>

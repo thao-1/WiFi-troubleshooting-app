@@ -36,6 +36,7 @@ async def chat(request: ChatRequest):
         logger.info(f"Created new session: {session_id}")
 
     session = sessions[session_id]
+    logger.info(f"SESSION DEBUG: id={session_id}, state={session.state}, idx={session.current_question_index}, answers={session.user_answers}, followups={session.follow_up_questions}")
     logger.info(f"Session {session_id} state: {session.state}")
 
     if session.state == ConversationState.GREETING:
@@ -131,13 +132,16 @@ async def chat(request: ChatRequest):
         service = get_troubleshoot_service()
         if service.is_issue_resolved(user_message):
             logger.info(f"Issue resolved after reboot for session {session_id}")
-            return ChatResponse(message=service.get_success_message())
+            session.state = ConversationState.CONVERSATION_END
+            return ChatResponse(message=service.get_success_message(), is_conversation_ended=True)
         else:
             logger.info(f"Issue not resolved after reboot for session {session_id}")
-            return ChatResponse(message=service.get_support_message())
+            session.state = ConversationState.CONVERSATION_END
+            return ChatResponse(message=service.get_support_message(), is_conversation_ended=True)
 
     elif session.state == ConversationState.CONVERSATION_END:
-        return ChatResponse(message="This conversation has ended. Please start a new session if you need more help.")
+        service = get_troubleshoot_service()
+        return ChatResponse(message=service.get_ending_message(), is_conversation_ended=True)
 
     else:
         logger.error(f"Unknown conversation state for session {session_id}: {session.state}")

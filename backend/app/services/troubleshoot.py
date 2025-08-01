@@ -224,4 +224,7 @@ Should the user try rebooting the router? Answer only YES or NO."""
 
         answer = response.choices[0].message.content.strip().lower()
         return "yes" in answer
- 
+
+    def get_ending_message(self) -> str:
+        """Get standardized conversation end message."""
+        return "This conversation has ended. Please start a new session if you need more help."
