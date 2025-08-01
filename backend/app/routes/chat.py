@@ -6,7 +6,7 @@ from app.services.troubleshoot import TroubleshootService
 
 logger = logging.getLogger(__name__)
 
-# Minimal ChatSession class for session state
+# ChatSession class for session state
 class ChatSession:
     def __init__(self):
         self.state = ConversationState.GREETING
