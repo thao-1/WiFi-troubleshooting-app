@@ -1,6 +1,27 @@
 import React, { useState } from 'react';
 import ChatbotIcon from './components/ChatbotIcon';
 import { useWifiBot } from './hooks/useWifiBot';
+import ReactMarkdown from 'react-markdown';
+
+function ChatMessage({ message, isBot }) {
+  return (
+    <div className={`message ${isBot ? 'bot-message' : 'user-message'}`}>
+      <div className="message-text">
+        {isBot ? (
+          <ReactMarkdown
+            components={{
+              strong: ({ children }) => <strong style={{ fontWeight: 'bold' }}>{children}</strong>
+            }}
+          >
+            {message}
+          </ReactMarkdown>
+        ) : (
+          message
+        )}
+      </div>
+    </div>
+  );
+}
 
 const App = () => {
   const [inputValue, setInputValue] = useState('');
@@ -70,7 +91,7 @@ const App = () => {
           {messages.map((msg, index) => (
             <div key={index} className={`message ${msg.isUser ? 'user-message' : 'bot-message'}`}>
               {!msg.isUser && <ChatbotIcon />}
-              <p className="message-text">{msg.content}</p>
+              <ChatMessage message={msg.content} isBot={!msg.isUser} />
             </div>
           ))}
           

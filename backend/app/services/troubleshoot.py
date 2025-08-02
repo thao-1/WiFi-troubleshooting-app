@@ -20,7 +20,7 @@ class TroubleshootService:
     async def generate_next_question(self, issue_description: str, test_results: AutoTestResults, user_answers: list[str], question_number: int) -> str:
         logger.info(f"Generating question {question_number + 1} for issue: {issue_description}")
         logger.debug(f"Test results: {test_results}, User answers: {user_answers}")
-        previous_context = "\n".join(
+        previous_context = "  \n".join(
             f"Q{i+1}: {q}\nA{i+1}: {a}" for i, (q, a) in enumerate(zip(user_answers[:-1], user_answers[1:]))
         ) if len(user_answers) > 1 else ""
 
@@ -144,7 +144,7 @@ Provide a specific, personalized conclusion that:
 4. Asks 1 last follow up question: "Did the reboot improve your connection? (Yes/No)
 5. Be conversational and helpful
 
-Keep the current status format but make the analysis and recommendations intelligent and specific to this situation."""
+Format your answer using Markdown. Use `###` for section headings and `-` for bullet points. Make the analysis and recommendations intelligent and specific to this situation."""
         
         response = await self.llm.chat.completions.create(
             model="gpt-4o",

@@ -55,13 +55,13 @@ async def chat(request: ChatRequest):
         logger.debug(f"Formatted test results: {formatted_results}")
         
         results_message = (
-            f"📊 **Test Results:**\n"
-            f"• **Speed:** {formatted_results['speed']} Mbps\n"
-            f"• **Latency:** {formatted_results['latency']} ms\n"
-            f"• **Connection Type:** {formatted_results['connection_type']}\n"
-            f"• **Connectivity:** {'✅ Working' if formatted_results.get('connectivity_status', True) else '❌ Issues detected'}\n\n"
-            f"Based on these results, let me ask you a few questions to better understand the issue."
-        )
+    f"📊 **Test Results**  \n"
+    f"• **Speed:** {formatted_results['speed']} Mbps  \n"
+    f"• **Latency:** {formatted_results['latency']} ms  \n"
+    f"• **Connection Type:** {formatted_results['connection_type']}  \n"
+    f"• **Connectivity:** {'✅ Working' if formatted_results.get('connectivity_status', True) else '❌ Issues detected'}  \n"
+    f"Based on these results, let me ask you a few questions to better understand the issue."
+)
         
         # Generate first follow-up question
         service = get_troubleshoot_service()
