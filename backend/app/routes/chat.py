@@ -69,7 +69,8 @@ async def chat(request: ChatRequest):
             session.issue_description,
             session.auto_test_results,
             session.user_answers,
-            0
+            0,  # question_number
+            session.follow_up_questions
         )
         
         session.follow_up_questions.append(question)
@@ -78,34 +79,44 @@ async def chat(request: ChatRequest):
         return ChatResponse(message=f"{results_message}\n\n{question}")
 
     elif session.state == ConversationState.FOLLOW_UP_QUESTIONS:
-        if session.current_question_index < len(session.follow_up_questions):
-            # Save previous answer
-            if session.current_question_index > 0:
-                session.user_answers.append(user_message)
-
-            # Check if we've asked enough questions (max 5)
-            if session.current_question_index >= 4:  # 0-indexed, so 5 questions total
-                service = get_troubleshoot_service()
-                conclusion = await service.generate_conclusion(session)
-                session.state = ConversationState.POST_REBOOT_CHECK
-                return ChatResponse(message=conclusion)
-            else:
-                service = get_troubleshoot_service()
-                question = await service.generate_next_question(
-                    session.issue_description,
-                    session.auto_test_results,
-                    session.user_answers,
-                    session.current_question_index
-                )
-
-                session.follow_up_questions.append(question)
-                session.current_question_index += 1
-                logger.info(f"Generated follow-up question {session.current_question_index} for session {session_id}")
-                return ChatResponse(message=question)
+        # Save the current answer before generating next question
+        if session.current_question_index < len(session.user_answers):
+            # We already have an answer for this question, update it
+            session.user_answers[session.current_question_index] = user_message
         else:
+            # First time answering this question
             session.user_answers.append(user_message)
-            session.state = ConversationState.SOLUTION_ANALYSIS
-            return ChatResponse(message="Thanks! Analyzing everything now...")
+        
+        logger.info(f"Current question progress - index: {session.current_question_index}, total answers: {len(session.user_answers)}")
+
+        # Check if we've asked enough questions (max 5)
+        if session.current_question_index >= 4:  # 0-indexed, so 5 questions total
+            service = get_troubleshoot_service()
+            conclusion = await service.generate_conclusion(session)
+            session.state = ConversationState.POST_REBOOT_CHECK
+            return ChatResponse(message=conclusion)
+        
+        # Generate next question
+        service = get_troubleshoot_service()
+        question = await service.generate_next_question(
+            session.issue_description,
+            session.auto_test_results,
+            session.user_answers,
+            session.current_question_index,
+            session.follow_up_questions
+        )
+        
+        # Only increment the question index after we've processed the current answer
+        session.current_question_index += 1
+        
+        # Store the next question
+        if len(session.follow_up_questions) <= session.current_question_index:
+            session.follow_up_questions.append(question)
+        else:
+            session.follow_up_questions[session.current_question_index] = question
+            
+        logger.info(f"Generated follow-up question {session.current_question_index + 1} for session {session_id}")
+        return ChatResponse(message=question)
 
     elif session.state == ConversationState.SOLUTION_ANALYSIS:
         logger.info(f"Analyzing solution for session {session_id}")

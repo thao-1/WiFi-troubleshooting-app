@@ -17,7 +17,15 @@ class TroubleshootService:
         from app.routes.chat import ChatSession  
         return ChatSession()
 
-    async def generate_next_question(self, issue_description: str, test_results: AutoTestResults, user_answers: list[str], question_number: int) -> str:
+    async def generate_next_question(
+        self,
+        issue_description: str,
+        test_results: AutoTestResults,
+        user_answers: list[str],
+        question_number: int,
+        follow_up_questions: list[str],
+    ) -> str:
+        
         logger.info(f"Generating question {question_number + 1} for issue: {issue_description}")
         logger.debug(f"Test results: {test_results}, User answers: {user_answers}")
         previous_context = "  \n".join(
@@ -35,24 +43,36 @@ class TroubleshootService:
             f"Device Type: {formatted_results['device_type']}"
         )
 
+        previous_questions = " | ".join(follow_up_questions)
         system_prompt = f"""You are a WiFi troubleshooting expert. Your job is to help diagnose the user's WiFi issue by asking ONE question at a time.
 
 User's Issue: {issue_description}
 {test_summary}
 {previous_context}
-
+Previous questions already asked: {previous_questions}
 This is question #{question_number+1} out of 5.
 
 **Your task:**
 - Ask ONLY ONE clear, specific troubleshooting question.
-- Keep it smart, clever, experienced and relevant.
-- Use the test results and previous answers to guide your next question.
-- DO NOT repeat previous questions that you already had the answer.
-- After 5 questions, you MUST provide a specific conclusion with clear reboot instructions OR specific troubleshooting steps.
-- Be very specific: tell them exactly what to reboot, how to do it, and what to expect.
-- If reboot is needed, ask them to reboot then ask a final question: "Did the reboot improve your connection?" Yes/No "
-- Your last conclusion response MUST end with: **"Did the reboot improve your connection? (Yes/No)"** — nothing more.
-- In the conclusion, DO NOT add follow-up offers of help, support messages, or any other texts after the Yes/No question.
+- Each question must cover a DIFFERENT aspect of troubleshooting (hardware, software, configuration, environment, etc.)
+- DO NOT repeat or rephrase previous questions listed above.
+- If a question was already asked and answered, move to a different aspect.
+- Questions should progress from most common to least common issues.
+- Make each question specific and actionable.
+- Consider the test results and previous answers when forming your question.
+
+**Question Categories (for reference):**
+1. Network congestion and bandwidth usage
+2. Physical connection and hardware issues
+3. Router/Modem configuration and status
+4. Signal strength and interference
+5. Device-specific issues
+
+**Important Rules:**
+- After 5 questions, provide a specific conclusion with clear reboot instructions if needed.
+- If reboot is needed, your last response MUST end with: **"Did the reboot improve your connection? (Yes/No)"**
+- DO NOT add any text after the Yes/No question in the conclusion.
+- Be specific and technical in your recommendations.
 
 Now ask ONLY the next question or finish with the final reboot instructions and Yes/No question:
 """
@@ -61,7 +81,8 @@ Now ask ONLY the next question or finish with the final reboot instructions and 
             model="gpt-4o",
             messages=[
                 {"role": "system", "content": system_prompt},
-            ]
+            ],
+            temperature=0.2
         )
         question = response.choices[0].message.content.strip()
         logger.info(f"Generated question: {question}")
@@ -219,7 +240,8 @@ Should the user try rebooting the router? Answer only YES or NO."""
             model="gpt-4o",
             messages=[
                 {"role": "system", "content": prompt},
-            ]
+            ],
+            temperature=0.2
         )
 
         answer = response.choices[0].message.content.strip().lower()
