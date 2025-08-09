@@ -19,7 +19,7 @@ class ChatSession:
 router = APIRouter()
 sessions = {}
 
-# Initialize service lazily to ensure environment variables are loaded
+# Initialize service to ensure environment variables are loaded
 def get_troubleshoot_service():
     return TroubleshootService()
 
