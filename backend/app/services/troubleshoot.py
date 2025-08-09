@@ -184,8 +184,6 @@ Format your answer using Markdown. Use `###` for section headings and `-` for bu
         resolved = any(keyword in user_message.lower() for keyword in ['fine', 'works', 'fixed', 'yes', 'good', 'better', 'resolved', 'solved'])
         logger.info(f"Issue resolved check: {user_message} -> {resolved}")
         return resolved
-        resolved_keywords = ['fine', 'works', 'fixed', 'yes', 'good', 'better', 'resolved', 'solved']
-        return any(keyword in user_message.lower() for keyword in resolved_keywords)
 
     def get_success_message(self) -> str:
         """Get standardized success message."""
