@@ -16,6 +16,40 @@ class TroubleshootService:
     def initialize_session(self):
         from app.routes.chat import ChatSession  
         return ChatSession()
+    
+    async def is_input_valid(self, user_input: str, question: str) -> bool:
+        """
+        Use LLM to validate if user input appropriately answers the question.
+        Returns True if valid, False if invalid.
+        """
+        if not user_input or not user_input.strip():
+            return False
+        
+        validation_prompt = f"""Question: "{question}"
+User response: "{user_input}"
+
+Does the user's response appropriately answer the question? Consider variations and be reasonably lenient.
+
+Answer only: YES or NO"""
+
+        try:
+            response = await self.llm.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {"role": "system", "content": validation_prompt}
+                ],
+                temperature=0.1,
+                max_tokens=10
+            )
+            
+            result = response.choices[0].message.content.strip().upper()
+            logger.info(f"Input validation result: {result}")
+            return "YES" in result
+                
+        except Exception as e:
+            logger.error(f"Error during input validation: {e}")
+            # If validation fails, assume input is valid to avoid blocking user
+            return True
 
     async def generate_next_question(
         self,
@@ -24,13 +58,35 @@ class TroubleshootService:
         user_answers: list[str],
         question_number: int,
         follow_up_questions: list[str],
+        previous_question: str | None = None,
+        user_input: str | None = None,
+        last_question: str | None = None,
     ) -> str:
         
         logger.info(f"Generating question {question_number + 1} for issue: {issue_description}")
         logger.debug(f"Test results: {test_results}, User answers: {user_answers}")
+        
+        # Derive missing context from existing lists if not provided explicitly
+        if previous_question is None and follow_up_questions:
+            previous_question = follow_up_questions[-1]
+        if user_input is None and user_answers:
+            user_input = user_answers[-1]
+        if last_question is None:
+            last_question = previous_question
+
+        # Validate user input if we have a previous question and user response
+        if previous_question and user_input is not None:
+            is_valid = await self.is_input_valid(user_input, previous_question)
+            
+            if not is_valid:
+                logger.info(f"Invalid user input detected: {user_input}. Re-asking question.")
+                return last_question or previous_question
+        
+        # Build prior Q/A pairs correctly by pairing asked questions with their answers
         previous_context = "  \n".join(
-            f"Q{i+1}: {q}\nA{i+1}: {a}" for i, (q, a) in enumerate(zip(user_answers[:-1], user_answers[1:]))
-        ) if len(user_answers) > 1 else ""
+            f"Q{i+1}: {q}\nA{i+1}: {a}"
+            for i, (q, a) in enumerate(zip(follow_up_questions, user_answers))
+        ) if user_answers and follow_up_questions else ""
 
         # Use centralized test results formatting
         formatted_results = self.format_test_results(test_results)
@@ -44,45 +100,50 @@ class TroubleshootService:
         )
 
         previous_questions = " | ".join(follow_up_questions)
-        system_prompt = f"""You are a WiFi troubleshooting expert. Your job is to help diagnose the user's WiFi issue by asking ONE question at a time.
+        system_prompt = f"""
+You are a WiFi troubleshooting expert. Your role is to diagnose the user's WiFi issue by asking **ONE** question at a time, progressing from the most common causes to the least common.
 
 User's Issue: {issue_description}
 {test_summary}
 {previous_context}
-Previous questions already asked: {previous_questions}
-This is question #{question_number+1} out of 5.
+Previous questions: {previous_questions}
+This is question #{question_number+1}.
 
-**Your task:**
-- Ask ONLY ONE clear, specific troubleshooting question.
-- Each question must cover a DIFFERENT aspect of troubleshooting (hardware, software, configuration, environment, etc.)
-- DO NOT repeat or rephrase previous questions listed above.
-- If a question was already asked and answered, move to a different aspect.
-- Questions should progress from most common to least common issues.
-- Make each question specific and actionable.
-- Consider the test results and previous answers when forming your question.
+**Your core objectives:**
+- Review the previous questions already asked
+- Ask ONLY **one** clear, specific, and actionable troubleshooting question at a time.
+- Base each question on the test results, previous answers, and remaining unexplored categories.
+- Progress logically: start with the most common potential issues before moving to rarer ones.
 
-**Question Categories (for reference):**
-1. Network congestion and bandwidth usage
-2. Physical connection and hardware issues
-3. Router/Modem configuration and status
-4. Signal strength and interference
-5. Device-specific issues
+**Handling invalid or unhelpful responses:**
+- If the user gives an irrelevant, nonsense, evasive, or incomplete answer, **ask the same question again but in a different way** (simpler words, more context, or examples).
+- If they refuse to answer, reframe the question so it’s easier or more appealing to answer.
+- Keep re-asking in alternative forms until you receive a valid, useful answer.
+- Only move to a new topic when you have enough information about the current one.
 
-**Important Rules:**
-- After 5 questions, provide a specific conclusion with clear reboot instructions if needed.
-- If reboot is needed, your last response MUST end with: **"Did the reboot improve your connection? (Yes/No)"**
-- DO NOT add any text after the Yes/No question in the conclusion.
-- Be specific and technical in your recommendations.
+**Question Categories (reference order):**
+1. Network congestion & bandwidth usage  
+2. Physical connection & hardware issues  
+3. Router/Modem configuration & status  
+4. Signal strength & interference  
+5. Device-specific issues  
 
-Now ask ONLY the next question or finish with the final reboot instructions and Yes/No question:
+**Important final step:**
+- Once you’ve gathered enough information, provide a **specific technical conclusion**.
+- If a reboot is required, end your last response **exactly** with:  
+  `Did the reboot improve your connection? (Yes/No)`  
+- Do **not** add any text after this Yes/No question.
+
+Now, ask ONLY the **next** troubleshooting question — or, if ready, give the final conclusion with the reboot question.
 """
+
 
         response = await self.llm.chat.completions.create(
             model="gpt-4o",
             messages=[
                 {"role": "system", "content": system_prompt},
             ],
-            temperature=0.2
+            temperature=0.0
         )
         question = response.choices[0].message.content.strip()
         logger.info(f"Generated question: {question}")
